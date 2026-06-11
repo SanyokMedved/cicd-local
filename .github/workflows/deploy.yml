@@ -94,8 +94,13 @@ jobs:
             echo "Новое окружение. Клонируем ветку..."
             mkdir -p "$BASE_DIR"
             git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git "$TARGET_DIR"
-            cd "$TARGET_DIR"
           fi
+          
+          # 🚀 ЖЕСТКИЙ ПЕРЕХОД: Гарантируем, что мы находимся в нужной папке перед билдом
+          cd "$TARGET_DIR"
+          
+          # Проверим, на месте ли файл (выведет ошибку в лог, если файла нет)
+          ls -la docker-compose.yml
           
           # Создаем локальный .env файл для конкретной ветки
           echo "BRANCH_NAME=$BRANCH" > .env
