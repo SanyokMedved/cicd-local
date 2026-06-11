@@ -1,0 +1,66 @@
+name: Production CI/CD Simulation
+
+on:
+  push:
+    branches:
+      - master # Запуск только при пуше в мастер
+
+jobs:
+  # 1. СТАДИЯ ПРОВЕРКИ
+  validate:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Code Linting & Static Analysis
+        run: |
+          echo "Запуск линтеров (например: phpcs, eslint или flake8)..."
+          # Пример: ./vendor/bin/phpcs --standard=Drupal /src
+          echo "Проверка синтаксиса успешна!"
+
+      - name: Run Unit Tests
+        run: |
+          echo "Запуск тестов (например: phpunit, jest)..."
+          # Пример: ./vendor/bin/phpunit
+          echo "Все тесты пройдены!"
+
+  # 2. СТАДИЯ ДЕПЛОЯ И СБОРКИ (Запустится только если тесты прошли успешно)
+  deploy-and-build:
+    needs: validate # Ждем успешного завершения первой джобы
+    runs-on: self-hosted
+    
+    steps:
+      - name: Deploy (Pull changes on Destination)
+        run: |
+          echo "Переходим в папку прод-сервера..."
+          # ⚠️ Укажите здесь АБСОЛЮТНЫЙ путь к вашей папке Destination
+          cd "/Users/oleksandr/Sites/cicd/destination"
+          
+          echo "Стягиваем свежий код из репозитория..."
+          git fetch origin master
+          git reset --hard origin/master # Жестко обновляем прод до состояния мастера
+
+      - name: Production Build & Dependency Install
+        run: |
+          cd "/Users/oleksandr/Sites/cicd/destination"
+          echo "Установка продакшн зависимостей..."
+          # Пример для PHP: composer install --no-dev --optimize-autoloader
+          # Пример для Node: npm ci --production
+          
+          echo "Сборка фронтенда / ассетов..."
+          # Пример: npm run build
+          
+          echo "Очистка и прогрев кэша приложения..."
+          # Пример для Drupal: drush cr
+          # Пример для Symfony: php bin/console cache:clear
+          
+          echo "Применение миграций базы данных..."
+          # Пример: php bin/console doctrine:migrations:migrate --no-interaction
+
+      - name: Sanity Check
+        run: |
+          echo "Финальная проверка: отвечает ли приложение?"
+          # Можно отправить curl запрос к локальному хосту, если поднят веб-сервер
+          # curl -sSf http://destination.docker:8002 || exit 1
+          echo "🚀 Деплой на 'Прод' успешно завершен и проверен!"
