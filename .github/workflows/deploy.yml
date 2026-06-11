@@ -1,13 +1,20 @@
-name: Production CI/CD Simulation
+name: CI/CD Pipeline (Master & Feature Branches)
 
 on:
   push:
     branches:
-      - master # Запуск только при пуше в мастер
+      - master
+      - '*' # Отслеживаем пуш во все остальные ветки
+  delete:
+    branches:
+      - '*' # Отслеживаем удаление веток для очистки окружений
 
 jobs:
-  # 1. СТАДИЯ ПРОВЕРКИ
+  # ==========================================
+  # 1. СТАДИЯ ПРОВЕРКИ (Запускается для ВСЕХ веток при пуше)
+  # ==========================================
   validate:
+    if: github.event_name == 'push'
     runs-on: self-hosted
     steps:
       - name: Checkout code
@@ -15,52 +22,121 @@ jobs:
 
       - name: Run Code Linting & Static Analysis
         run: |
-          echo "Запуск линтеров (например: phpcs, eslint или flake8)..."
-          # Пример: ./vendor/bin/phpcs --standard=Drupal /src
+          echo "Запуск линтеров (phpcs / eslint)..."
+          # Здесь будут ваши команды проверки, например:
+          # ./vendor/bin/phpcs --standard=Drupal ./html
           echo "Проверка синтаксиса успешна!"
 
       - name: Run Unit Tests
         run: |
-          echo "Запуск тестов (например: phpunit, jest)..."
+          echo "Запуск юнит-тестов..."
           # Пример: ./vendor/bin/phpunit
           echo "Все тесты пройдены!"
 
-  # 2. СТАДИЯ ДЕПЛОЯ И СБОРКИ (Запустится только если тесты прошли успешно)
-  deploy-and-build:
-    needs: validate # Ждем успешного завершения первой джобы
+
+  # ==========================================
+  # 2. ДЕПЛОЙ НА ПРОД (Только для ветки master)
+  # ==========================================
+  deploy-production:
+    needs: validate
+    if: github.event_name == 'push' && github.ref_name == 'master'
     runs-on: self-hosted
-    
     steps:
-      - name: Deploy (Pull changes on Destination)
+      - name: Deploy to Destination (Production)
         run: |
           echo "Переходим в папку прод-сервера..."
-          # ⚠️ Укажите здесь АБСОЛЮТНЫЙ путь к вашей папке Destination
           cd "/Users/oleksandr/Sites/cicd/destination"
           
-          echo "Стягиваем свежий код из репозитория..."
+          echo "Стягиваем свежий код из master..."
           git fetch origin master
-          git reset --hard origin/master # Жестко обновляем прод до состояния мастера
+          git reset --hard origin/master
 
-      - name: Production Build & Dependency Install
+      - name: Production Build & Cache Clear
         run: |
           cd "/Users/oleksandr/Sites/cicd/destination"
-          echo "Установка продакшн зависимостей..."
-          # Пример для PHP: composer install --no-dev --optimize-autoloader
-          # Пример для Node: npm ci --production
-          
-          echo "Сборка фронтенда / ассетов..."
-          # Пример: npm run build
-          
-          echo "Очистка и прогрев кэша приложения..."
-          # Пример для Drupal: drush cr
-          # Пример для Symfony: php bin/console cache:clear
-          
-          echo "Применение миграций базы данных..."
-          # Пример: php bin/console doctrine:migrations:migrate --no-interaction
+          echo "Сборка окружения и очистка кэша..."
+          # Если используется docker-compose на проде, можно запустить:
+          # docker-compose up -d --build
+          # Очистка кэша Drupal:
+          # docker-compose exec -T drupal drush cr
+          echo "🚀 Деплой на Прод (Destination) успешно завершен!"
 
-      - name: Sanity Check
+
+  # ==========================================
+  # 3. ДЕПЛОЙ ФИЧ-ВЕТОК (Для всех веток, кроме master)
+  # ==========================================
+  deploy-feature-branch:
+    needs: validate
+    if: github.event_name == 'push' && github.ref_name != 'master'
+    runs-on: self-hosted
+    steps:
+      - name: Get clean branch name
+        id: branch-name
         run: |
-          echo "Финальная проверка: отвечает ли приложение?"
-          # Можно отправить curl запрос к локальному хосту, если поднят веб-сервер
-          # curl -sSf http://destination.docker:8002 || exit 1
-          echo "🚀 Деплой на 'Прод' успешно завершен и проверен!"
+          # Превращаем имя ветки в безопасное для папок и контейнеров (из feature/test делаем feature_test)
+          CLEAN_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g' | tr '[:upper:]' '[:lower:]')
+          echo "branch=${CLEAN_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Deploy or Update Feature Environment
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          BASE_DIR="/Users/oleksandr/Sites/cicd/branches"
+          TARGET_DIR="$BASE_DIR/$BRANCH"
+          
+          echo "Развертывание ветки $BRANCH..."
+          
+          if [ -d "$TARGET_DIR" ]; then
+            echo "Окружение существует. Обновляем код..."
+            cd "$TARGET_DIR"
+            git fetch origin ${{ github.ref_name }}
+            git reset --hard origin/${{ github.ref_name }}
+          else
+            echo "Новое окружение. Клонируем ветку..."
+            mkdir -p "$BASE_DIR"
+            git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git "$TARGET_DIR"
+            cd "$TARGET_DIR"
+          fi
+          
+          # Создаем локальный .env файл для конкретной ветки
+          echo "BRANCH_NAME=$BRANCH" > .env
+          echo "MYSQL_ROOT_PASSWORD=root" >> .env
+          echo "MYSQL_DATABASE=drupal" >> .env
+          
+          echo "Запуск Docker контейнеров под управлением Traefik..."
+          docker-compose up -d --build
+          
+          echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
+
+
+  # ==========================================
+  # 4. УДАЛЕНИЕ ОКРУЖЕНИЯ (При удалении ветки в Git)
+  # ==========================================
+  cleanup-feature-branch:
+    if: github.event_name == 'delete' && github.event.ref != 'master'
+    runs-on: self-hosted
+    steps:
+      - name: Get deleted branch name
+        id: branch-name
+        run: |
+          CLEAN_NAME=$(echo "${{ github.event.ref }}" | sed 's/[^a-zA-Z0-9_-]/_/g' | tr '[:upper:]' '[:lower:]')
+          echo "branch=${CLEAN_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Destroy Docker Containers and Folder
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          TARGET_DIR="/Users/oleksandr/Sites/cicd/branches/$BRANCH"
+          
+          if [ -d "$TARGET_DIR" ]; then
+            echo "Удаляем окружение для ветки $BRANCH..."
+            cd "$TARGET_DIR"
+            
+            # Останавливаем контейнеры этой ветки и удаляем их анонимные/именованные волюмы базы данных
+            docker-compose down -v
+            
+            # Удаляем физическую папку ветки
+            cd ..
+            rm -rf "$TARGET_DIR"
+            echo "🧹 Окружение $BRANCH полностью удалено."
+          else
+            echo "Папка для ветки $BRANCH не найдена, очистка не требуется."
+          fi
