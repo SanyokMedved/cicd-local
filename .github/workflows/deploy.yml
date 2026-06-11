@@ -96,13 +96,13 @@ jobs:
             git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git "$TARGET_DIR"
           fi
           
-          # 🚀 ЖЕСТКИЙ ПЕРЕХОД: Гарантируем, что мы находимся в нужной папке перед билдом
-          cd "$TARGET_DIR"
+          # 🚀 ИСПРАВЛЕНИЕ: Переходим внутрь папки source, где физически лежит docker-compose.yml
+          cd "$TARGET_DIR/source"
           
-          # Проверим, на месте ли файл (выведет ошибку в лог, если файла нет)
+          # Проверяем, что теперь файл виден
           ls -la docker-compose.yml
           
-          # Создаем локальный .env файл для конкретной ветки
+          # Создаем локальный .env файл прямо там, где лежит docker-compose.yml
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
@@ -133,13 +133,12 @@ jobs:
           
           if [ -d "$TARGET_DIR" ]; then
             echo "Удаляем окружение для ветки $BRANCH..."
-            cd "$TARGET_DIR"
             
-            # Останавливаем контейнеры этой ветки и удаляем их анонимные/именованные волюмы базы данных
+            # Заходим в папку с docker-compose, чтобы остановить контейнеры
+            cd "$TARGET_DIR/source"
             docker-compose down -v
             
-            # Удаляем физическую папку ветки
-            cd ..
+            # Удаляем полностью всю физическую папку ветки
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
           else
