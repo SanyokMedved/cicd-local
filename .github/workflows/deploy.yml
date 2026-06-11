@@ -102,16 +102,16 @@ jobs:
           ls -la
           echo "================================="
           
-          # Создаем .env для Docker Compose этой ветки
+          # Создаем локальный .env файл (пусть остается для контейнеров)
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
           
           echo "Запуск Docker контейнеров под управлением Traefik..."
-          docker-compose up -d --build
+          # 🚀 ИСПРАВЛЕНИЕ: Передаем BRANCH_NAME прямо перед командой up
+          BRANCH_NAME=$BRANCH docker-compose up -d --build
           
           echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
-
 
   # ==========================================
   # 4. УДАЛЕНИЕ ОКРУЖЕНИЯ (При удалении ветки в Git)
@@ -134,11 +134,10 @@ jobs:
           if [ -d "$TARGET_DIR" ]; then
             echo "Удаляем окружение для ветки $BRANCH..."
             
-            # Заходим прямо в корень папки ветки к docker-compose.yml
             cd "$TARGET_DIR"
-            docker-compose down -v
+            # 🚀 ИСПРАВЛЕНИЕ: Передаем BRANCH_NAME перед down, чтобы Docker знал какой волюм удалять
+            BRANCH_NAME=$BRANCH docker-compose down -v
             
-            # Удаляем ветку полностью
             cd ..
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
