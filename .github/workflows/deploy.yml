@@ -95,21 +95,36 @@ jobs:
             git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git "$TARGET_DIR"
           fi
           
-          # 🚀 Переходим прямо в корень склонированной ветки (где и лежит docker-compose.yml)
           cd "$TARGET_DIR"
+          ls -la docker-compose.yml
           
-          echo "==== Проверка файлов в ветке ===="
-          ls -la
-          echo "================================="
-          
-          # Создаем локальный .env файл (пусть остается для контейнеров)
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
           
-          echo "Запуск Docker контейнеров под управлением Traefik..."
-          # 🚀 ИСПРАВЛЕНИЕ: Передаем BRANCH_NAME прямо перед командой up
+          echo "Запуск Docker контейнеров..."
           BRANCH_NAME=$BRANCH docker-compose up -d --build
+          
+          echo "Обновляем конфиг Traefik..."
+          if grep -q "^\s*$BRANCH:" /Users/oleksandr/Sites/cicd/traefik/traefik-config.yml; then
+            echo "Branch уже в Traefik config"
+          else
+            cat >> /Users/oleksandr/Sites/cicd/traefik/traefik-config.yml << 'TRAEFIK'
+
+    $BRANCH:
+      rule: Host(`$BRANCH.docker`)
+      entryPoints:
+        - web
+      service: $BRANCH
+  
+  services:
+    $BRANCH:
+      loadBalancer:
+        servers:
+          - url: http://${BRANCH}_drupal:80
+TRAEFIK
+            docker restart traefik
+          fi
           
           echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
 

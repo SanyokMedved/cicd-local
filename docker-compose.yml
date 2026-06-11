@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   drupal:
     image: drupal:11-apache
-    container_name: "${BRANCH_NAME}_drupal"
+    container_name: "${BRANCH_NAME:-source}_drupal"
     env_file:
       - .env
     volumes:
@@ -12,34 +10,28 @@ services:
       - db
     networks:
       - branch_network
-      - traefik_gateway # Подключаем к прокси-сети
-    
-    # Вот тут магия Traefik:
-    labels:
-      - "traefik.enable=true"
-      # Говорим слушать домен <имя_ветки>.docker
-      - "traefik.http.routers.${BRANCH_NAME}-router.rule=Host(`${BRANCH_NAME}.docker`)"
-      - "traefik.http.routers.${BRANCH_NAME}-router.entrypoints=web"
-      # Указываем внутренний порт контейнера Apache (у drupal:11-apache это 80)
-      - "traefik.http.services.${BRANCH_NAME}-service.loadbalancer.server.port=80"
+      - traefik_network
+    restart: unless-stopped
 
   db:
     image: mysql:8.0
-    container_name: "${BRANCH_NAME}_db"
+    container_name: "${BRANCH_NAME:-source}_db"
     env_file:
       - .env
     volumes:
       - db_data:/var/lib/mysql
     networks:
-      - branch_network # Базе данных незачем смотреть в traefik_gateway
+      - branch_network
+    restart: unless-stopped
 
 volumes:
   db_data:
-    name: "${BRANCH_NAME}_db_data"
+    name: "${BRANCH_NAME:-source}_db_data"
 
 networks:
   branch_network:
-    name: "${BRANCH_NAME}_network"
+    name: "${BRANCH_NAME:-source}_network"
     driver: bridge
-  traefik_gateway:
-    external: true # Указываем, что сеть создана глобальным Traefik
+  traefik_network:
+    name: traefik_network
+    external: true
