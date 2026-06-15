@@ -88,45 +88,16 @@ jobs:
           fi
           
           cd "$TARGET_DIR"
-<<<<<<< HEAD
-=======
           
->>>>>>> master
           ls -la docker-compose.yml
           
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
           
-<<<<<<< HEAD
-          echo "Запуск Docker контейнеров..."
-          BRANCH_NAME=$BRANCH docker-compose up -d --build
-          
-          echo "Обновляем конфиг Traefik..."
-          if grep -q "^\s*$BRANCH:" /Users/oleksandr/Sites/cicd/traefik/traefik-config.yml; then
-            echo "Branch уже в Traefik config"
-          else
-            cat >> /Users/oleksandr/Sites/cicd/traefik/traefik-config.yml << 'TRAEFIK'
-
-    $BRANCH:
-      rule: Host(`$BRANCH.docker`)
-      entryPoints:
-        - web
-      service: $BRANCH
-  
-  services:
-    $BRANCH:
-      loadBalancer:
-        servers:
-          - url: http://${BRANCH}_drupal:80
-TRAEFIK
-            docker restart traefik
-          fi
-=======
           echo "Запуск Docker контейнеров под управлением Traefik..."
           # Передаем переменную принудительно, чтобы у Docker v3 не было варнингов
           BRANCH_NAME=$BRANCH docker-compose up -d --build
->>>>>>> master
           
           echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
 
@@ -150,17 +121,11 @@ TRAEFIK
           
           if [ -d "$TARGET_DIR" ]; then
             echo "Удаляем окружение для ветки $BRANCH..."
-            
             cd "$TARGET_DIR"
-            # 🚀 ИСПРАВЛЕНИЕ: Передаем BRANCH_NAME перед down, чтобы Docker знал какой волюм удалять
-            BRANCH_NAME=$BRANCH docker-compose down -v
             
-<<<<<<< HEAD
-=======
             # Передаем имя ветки для корректного удаления связанных волюмов
             BRANCH_NAME=$BRANCH docker-compose down -v
             
->>>>>>> master
             cd ..
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
