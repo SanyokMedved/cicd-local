@@ -23,16 +23,12 @@ jobs:
       - name: Run Code Linting & Static Analysis
         run: |
           echo "Запуск линтеров (phpcs / eslint)..."
-          # Здесь будут ваши команды проверки, например:
-          # ./vendor/bin/phpcs --standard=Drupal ./html
           echo "Проверка синтаксиса успешна!"
 
       - name: Run Unit Tests
         run: |
           echo "Запуск юнит-тестов..."
-          # Пример: ./vendor/bin/phpunit
           echo "Все тесты пройдены!"
-
 
   # ==========================================
   # 2. ДЕПЛОЙ НА ПРОД (Только для ветки master)
@@ -55,12 +51,8 @@ jobs:
         run: |
           cd "/Users/oleksandr/Sites/cicd/destination"
           echo "Сборка окружения и очистка кэша..."
-          # Если используется docker-compose на проде, можно запустить:
-          # docker-compose up -d --build
-          # Очистка кэша Drupal:
-          # docker-compose exec -T drupal drush cr
+          BRANCH_NAME=destination docker-compose up -d --build
           echo "🚀 Деплой на Прод (Destination) успешно завершен!"
-
 
   # ==========================================
   # 3. ДЕПЛОЙ ФИЧ-ВЕТОК (Для всех веток, кроме master)
@@ -96,12 +88,17 @@ jobs:
           fi
           
           cd "$TARGET_DIR"
+<<<<<<< HEAD
+=======
+          
+>>>>>>> master
           ls -la docker-compose.yml
           
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
           
+<<<<<<< HEAD
           echo "Запуск Docker контейнеров..."
           BRANCH_NAME=$BRANCH docker-compose up -d --build
           
@@ -125,6 +122,11 @@ jobs:
 TRAEFIK
             docker restart traefik
           fi
+=======
+          echo "Запуск Docker контейнеров под управлением Traefik..."
+          # Передаем переменную принудительно, чтобы у Docker v3 не было варнингов
+          BRANCH_NAME=$BRANCH docker-compose up -d --build
+>>>>>>> master
           
           echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
 
@@ -153,6 +155,12 @@ TRAEFIK
             # 🚀 ИСПРАВЛЕНИЕ: Передаем BRANCH_NAME перед down, чтобы Docker знал какой волюм удалять
             BRANCH_NAME=$BRANCH docker-compose down -v
             
+<<<<<<< HEAD
+=======
+            # Передаем имя ветки для корректного удаления связанных волюмов
+            BRANCH_NAME=$BRANCH docker-compose down -v
+            
+>>>>>>> master
             cd ..
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
