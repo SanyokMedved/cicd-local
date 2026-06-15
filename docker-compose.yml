@@ -12,6 +12,15 @@ services:
       - branch_network
       - traefik_network
     restart: unless-stopped
+    
+    # 🚀 ДОБАВЛЯЕМ МЕТКИ ДЛЯ АВТОМАТИЧЕСКОГО СВЯЗЫВАНИЯ С TRAEFIK
+    labels:
+      - "traefik.enable=true"
+      # Создаем уникальное имя роутера для каждой ветки (например, feature-2_router)
+      - "traefik.http.routers.${BRANCH_NAME:-source}_router.rule=Host(`${BRANCH_NAME:-source}.docker`)"
+      - "traefik.http.routers.${BRANCH_NAME:-source}_router.entrypoints=web"
+      # Указываем внутренний порт контейнера Drupal (Apache по умолчанию слушает 80)
+      - "traefik.http.services.${BRANCH_NAME:-source}_service.loadbalancer.server.port=80"
 
   db:
     image: mysql:8.0
