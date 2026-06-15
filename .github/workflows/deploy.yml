@@ -23,16 +23,12 @@ jobs:
       - name: Run Code Linting & Static Analysis
         run: |
           echo "Запуск линтеров (phpcs / eslint)..."
-          # Здесь будут ваши команды проверки, например:
-          # ./vendor/bin/phpcs --standard=Drupal ./html
           echo "Проверка синтаксиса успешна!"
 
       - name: Run Unit Tests
         run: |
           echo "Запуск юнит-тестов..."
-          # Пример: ./vendor/bin/phpunit
           echo "Все тесты пройдены!"
-
 
   # ==========================================
   # 2. ДЕПЛОЙ НА ПРОД (Только для ветки master)
@@ -55,12 +51,8 @@ jobs:
         run: |
           cd "/Users/oleksandr/Sites/cicd/destination"
           echo "Сборка окружения и очистка кэша..."
-          # Если используется docker-compose на проде, можно запустить:
-          # docker-compose up -d --build
-          # Очистка кэша Drupal:
-          # docker-compose exec -T drupal drush cr
+          BRANCH_NAME=destination docker-compose up -d --build
           echo "🚀 Деплой на Прод (Destination) успешно завершен!"
-
 
   # ==========================================
   # 3. ДЕПЛОЙ ФИЧ-ВЕТОК (Для всех веток, кроме master)
@@ -73,7 +65,6 @@ jobs:
       - name: Get clean branch name
         id: branch-name
         run: |
-          # Превращаем имя ветки в безопасное для папок и контейнеров (из feature/test делаем feature_test)
           CLEAN_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9_-]/_/g' | tr '[:upper:]' '[:lower:]')
           echo "branch=${CLEAN_NAME}" >> $GITHUB_OUTPUT
 
@@ -94,19 +85,21 @@ jobs:
             echo "Новое окружение. Клонируем ветку..."
             mkdir -p "$BASE_DIR"
             git clone --branch ${{ github.ref_name }} https://github.com/${{ github.repository }}.git "$TARGET_DIR"
-            cd "$TARGET_DIR"
           fi
           
-          # Создаем локальный .env файл для конкретной ветки
+          cd "$TARGET_DIR"
+          
+          ls -la docker-compose.yml
+          
           echo "BRANCH_NAME=$BRANCH" > .env
           echo "MYSQL_ROOT_PASSWORD=root" >> .env
           echo "MYSQL_DATABASE=drupal" >> .env
           
           echo "Запуск Docker контейнеров под управлением Traefik..."
-          docker-compose up -d --build
+          # Передаем переменную принудительно, чтобы у Docker v3 не было варнингов
+          BRANCH_NAME=$BRANCH docker-compose up -d --build
           
           echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
-
 
   # ==========================================
   # 4. УДАЛЕНИЕ ОКРУЖЕНИЯ (При удалении ветки в Git)
@@ -130,10 +123,9 @@ jobs:
             echo "Удаляем окружение для ветки $BRANCH..."
             cd "$TARGET_DIR"
             
-            # Останавливаем контейнеры этой ветки и удаляем их анонимные/именованные волюмы базы данных
-            docker-compose down -v
+            # Передаем имя ветки для корректного удаления связанных волюмов
+            BRANCH_NAME=$BRANCH docker-compose down -v
             
-            # Удаляем физическую папку ветки
             cd ..
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
