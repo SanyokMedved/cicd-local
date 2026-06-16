@@ -119,14 +119,14 @@ jobs:
           BRANCH="${{ steps.branch-name.outputs.branch }}"
           TARGET_DIR="/Users/oleksandr/Sites/cicd/branches/$BRANCH"
           
-          if [ -f "$TARGET_DIR/init-db.sh" ]; then
-            echo "📊 Running database initialization..."
-            cd "$TARGET_DIR"
-            export MYSQL_ROOT_PASSWORD="root"
-            export MYSQL_DATABASE="drupal"
-            bash init-db.sh "$BRANCH" "/Users/oleksandr/Sites/cicd/source" "$TARGET_DIR"
-            echo "✅ Database initialization complete"
-          fi
+          # if [ -f "$TARGET_DIR/init-db.sh" ]; then
+          #   echo "📊 Running database initialization..."
+          #   cd "$TARGET_DIR"
+          #   export MYSQL_ROOT_PASSWORD="root"
+          #   export MYSQL_DATABASE="drupal"
+          #   bash init-db.sh "$BRANCH" "/Users/oleksandr/Sites/cicd/source" "$TARGET_DIR"
+          #   echo "✅ Database initialization complete"
+          # fi
 
       - name: Add Traefik Route for Branch
         run: |
