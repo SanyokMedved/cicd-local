@@ -54,6 +54,17 @@ jobs:
           BRANCH_NAME=destination docker-compose up -d --build
           echo "🚀 Деплой на Прод (Destination) успешно завершен!"
 
+      - name: Run Production Initialization Script
+        run: |
+          cd "/Users/oleksandr/Sites/cicd/destination"
+          if [ -f "run.sh" ]; then
+            echo "📝 Executing production run.sh..."
+            docker exec destination_drupal /bin/bash -c 'cd /var/www/html && bash run.sh' &
+            PRODUCTION_RUN_PID=$!
+            sleep 5
+            echo "✅ Production lifecycle manager started (PID: $PRODUCTION_RUN_PID)"
+          fi
+
   # ==========================================
   # 3. ДЕПЛОЙ ФИЧ-ВЕТОК (Для всех веток, кроме master)
   # ==========================================
@@ -96,10 +107,50 @@ jobs:
           echo "MYSQL_DATABASE=drupal" >> .env
           
           echo "Запуск Docker контейнеров под управлением Traefik..."
-          # Передаем переменную принудительно, чтобы у Docker v3 не было варнингов
           BRANCH_NAME=$BRANCH docker-compose up -d --build
           
-          echo "🚀 Сборка фичи готова! Ссылка: http://$BRANCH.docker"
+          echo "⏳ Waiting for containers to stabilize..."
+          sleep 5
+          
+          echo "🌍 Branch environment ready at: http://$BRANCH.docker"
+
+      - name: Initialize Database (First Time Only)
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          TARGET_DIR="/Users/oleksandr/Sites/cicd/branches/$BRANCH"
+          
+          if [ -f "$TARGET_DIR/init-db.sh" ]; then
+            echo "📊 Running database initialization..."
+            cd "$TARGET_DIR"
+            export MYSQL_ROOT_PASSWORD="root"
+            export MYSQL_DATABASE="drupal"
+            bash init-db.sh "$BRANCH" "/Users/oleksandr/Sites/cicd/source" "$TARGET_DIR"
+            echo "✅ Database initialization complete"
+          fi
+
+      - name: Add Traefik Route for Branch
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          echo "📝 Adding Traefik route for $BRANCH.docker..."
+          bash /Users/oleksandr/Sites/cicd/scripts/add-traefik-route.sh "$BRANCH" "/Users/oleksandr/Sites/cicd/traefik/config/branches.yml"
+          sleep 2
+
+      - name: Start Lifecycle Manager (run.sh)
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          TARGET_DIR="/Users/oleksandr/Sites/cicd/branches/$BRANCH"
+          
+          if [ -f "$TARGET_DIR/run.sh" ]; then
+            echo "🚀 Starting lifecycle manager for branch $BRANCH..."
+            docker exec ${BRANCH}_drupal /bin/bash -c 'cd /var/www/html && bash run.sh' > /tmp/branch-${BRANCH}-output.log 2>&1 &
+            RUN_SH_PID=$!
+            sleep 3
+            echo "✅ Lifecycle manager started (PID: $RUN_SH_PID)"
+            echo "📝 Logs: /tmp/branch-${BRANCH}-output.log"
+            
+            # Store PID for cleanup job
+            echo "$RUN_SH_PID" > /tmp/.${BRANCH}-run-pid
+          fi
 
   # ==========================================
   # 4. УДАЛЕНИЕ ОКРУЖЕНИЯ (При удалении ветки в Git)
@@ -113,6 +164,23 @@ jobs:
         run: |
           CLEAN_NAME=$(echo "${{ github.event.ref }}" | sed 's/[^a-zA-Z0-9_-]/_/g' | tr '[:upper:]' '[:lower:]')
           echo "branch=${CLEAN_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Stop Lifecycle Manager
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          
+          echo "🛑 Stopping lifecycle manager for branch $BRANCH..."
+          
+          # Try to kill the run.sh process gracefully
+          if [ -f "/tmp/.${BRANCH}-run-pid" ]; then
+            PID=$(cat /tmp/.${BRANCH}-run-pid)
+            kill -TERM $PID 2>/dev/null || true
+            rm -f "/tmp/.${BRANCH}-run-pid"
+            sleep 2
+          fi
+          
+          # Also try to kill via container name
+          docker exec ${BRANCH}_drupal killall bash 2>/dev/null || true
 
       - name: Destroy Docker Containers and Folder
         run: |
@@ -129,6 +197,11 @@ jobs:
             cd ..
             rm -rf "$TARGET_DIR"
             echo "🧹 Окружение $BRANCH полностью удалено."
+            
+            # Cleanup logs and markers
+            rm -f "/tmp/branch-${BRANCH}-output.log"
+            rm -f "/tmp/branch-${BRANCH}-run.log"
+            rm -f "/tmp/.${BRANCH}-running"
           else
             echo "Папка для ветки $BRANCH не найдена, очистка не требуется."
           fi
