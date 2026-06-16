@@ -165,6 +165,15 @@ jobs:
           CLEAN_NAME=$(echo "${{ github.event.ref }}" | sed 's/[^a-zA-Z0-9_-]/_/g' | tr '[:upper:]' '[:lower:]')
           echo "branch=${CLEAN_NAME}" >> $GITHUB_OUTPUT
 
+      - name: Checkout code (for cleanup scripts)
+        uses: actions/checkout@v4
+
+      - name: Remove Traefik Route for Branch
+        run: |
+          BRANCH="${{ steps.branch-name.outputs.branch }}"
+          echo "🗑️  Removing Traefik route for $BRANCH.docker..."
+          bash /Users/oleksandr/Sites/cicd/scripts/remove-traefik-route.sh "$BRANCH" "/Users/oleksandr/Sites/cicd/traefik/config/static-routes.yml"
+
       - name: Stop Lifecycle Manager
         run: |
           BRANCH="${{ steps.branch-name.outputs.branch }}"
